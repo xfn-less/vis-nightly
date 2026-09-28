@@ -1,0 +1,25 @@
+name: Build Vis master
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build
+        run: |
+          git clone --depth=1 https://github.com/martanne/vis.git
+          make -C vis docker
+          install -m755 vis/vis vis-master
+          ./vis-master -v
+          sha256sum vis-master > vis-master.sha256
+          git -C vis rev-parse HEAD > vis-master.commit
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view nightly >/dev/null 2>&1 ||
+            gh release create nightly --title "Vis master" --notes "Automated master build"
+          gh release upload nightly \
+            vis-master vis-master.sha256 vis-master.commit --clobber
