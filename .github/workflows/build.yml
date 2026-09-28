@@ -10,6 +10,7 @@ jobs:
       - name: Build
         run: |
           git clone --depth=1 https://github.com/martanne/vis.git
+          sed -i 's|FROM i386/alpine:|FROM alpine:|' vis/Dockerfile
           make -C vis docker
           install -m755 vis/vis vis-master
           ./vis-master -v
