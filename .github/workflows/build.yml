@@ -18,6 +18,7 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           gh release view nightly >/dev/null 2>&1 ||
             gh release create nightly --title "Vis master" --notes "Automated master build"
