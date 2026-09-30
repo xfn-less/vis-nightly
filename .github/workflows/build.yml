@@ -14,13 +14,39 @@ jobs:
     steps:
       - name: Build
         run: |
+          set -eux
           git clone --depth=1 https://github.com/martanne/vis.git
           git clone --depth=1 https://github.com/xfn-less/msi-void.git
           cp -a msi-void/void-config/vis/. vis/lua/
+          test -f vis/lua/my/formatter.lua
+          test -f vis/lua/themes/mytheme-dark.lua
+          grep -q 'mytheme-dark' vis/lua/visrc.lua
+          find vis/lua -name '*.lua' | grep -E 'my/|mytheme' | sort
           sed -i 's|FROM i386/alpine:|FROM alpine:|' vis/Dockerfile
           make -C vis docker
           install -m755 vis/vis vis-master
           ./vis-master -v
+          python3 <<'PY'
+          import io, lzma, pathlib, re, tarfile
+          data = pathlib.Path("vis-master").read_bytes()
+          magics = [m.start() for m in re.finditer(b"\xfd7zXZ\x00", data)]
+          assert magics, "no xz payload found"
+          raw = None
+          for off in magics:
+              try:
+                  raw = lzma.decompress(data[off:])
+              except lzma.LZMAError:
+                  continue
+          assert raw, "could not decompress xz payload"
+          names = tarfile.open(fileobj=io.BytesIO(raw), mode="r:").getnames()
+          print("payload entries", len(names))
+          for n in ("lua/visrc.lua", "lua/my/formatter.lua", "lua/themes/mytheme-dark.lua"):
+              assert n in names, n
+          tf = tarfile.open(fileobj=io.BytesIO(raw), mode="r:")
+          visrc = tf.extractfile("lua/visrc.lua").read().decode()
+          assert "mytheme-dark" in visrc, visrc[:200]
+          print("embedded void-config/vis OK")
+          PY
           sha256sum vis-master > vis-master.sha256
           git -C vis rev-parse HEAD > vis-master.commit
 
@@ -30,6 +56,6 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           gh release view nightly >/dev/null 2>&1 ||
-            gh release create nightly --title "Vis master" --notes "Automated master build"
+            gh release create nightly --title "Vis master" --notes "Automated master build with msi-void void-config/vis baked in"
           gh release upload nightly \
             vis-master vis-master.sha256 vis-master.commit --clobber
